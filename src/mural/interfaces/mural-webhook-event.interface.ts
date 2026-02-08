@@ -23,6 +23,18 @@ export interface MuralAccountCreditedPayload {
   accountWalletAddress: string;
 }
 
+export interface PayoutStatusChangedPayload {
+  type: 'payout_status_changed';
+  organizationId: string;
+  payoutRequestId: string;
+  payoutId: string;
+  statusChangeDetails: {
+    type: 'fiat' | 'blockchain';
+    previousStatus: { type: string };
+    currentStatus: { type: string };
+  };
+}
+
 export interface MuralWebhookEvent {
   eventId: string;
   deliveryId: string;
@@ -30,5 +42,5 @@ export interface MuralWebhookEvent {
   attemptNumber: number;
   eventCategory: string;
   occurredAt: string;
-  payload: MuralAccountCreditedPayload;
+  payload: MuralAccountCreditedPayload | PayoutStatusChangedPayload;
 }

@@ -25,4 +25,10 @@ export class OrdersController {
   findOne(@Param('id') id: string) {
     return this.ordersService.findOne(id);
   }
+
+  @Get(':id/payout')
+  @ApiOperation({ summary: 'Get payout status for an order' })
+  getPayout(@Param('id') id: string) {
+    return this.ordersService.getPayoutByOrderId(id);
+  }
 }

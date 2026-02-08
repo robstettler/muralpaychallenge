@@ -28,16 +28,16 @@ export class Order {
   @Column('decimal', { precision: 12, scale: 2 })
   totalUsdc: number;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   walletAddress: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   blockchain: string | null;
 
-  @Column({ default: 'USDC' })
+  @Column({ type: 'varchar', default: 'USDC' })
   tokenSymbol: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   muralAccountId: string | null;
 
   @CreateDateColumn()
@@ -46,7 +46,7 @@ export class Order {
   @Column('timestamptz')
   expiresAt: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   transactionHash: string | null;
 
   @Column({ type: 'timestamptz', nullable: true })

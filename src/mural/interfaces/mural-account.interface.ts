@@ -21,25 +21,4 @@ export interface MuralAccount {
   accountDetails?: MuralAccountDetails;
 }
 
-export interface MuralTransaction {
-  id: string;
-  hash: string;
-  transactionExecutionDate: string;
-  blockchain: string;
-  amount: MuralTokenAmount;
-  accountId: string;
-  transactionDetails: {
-    type: string;
-    details?: {
-      type: string;
-      senderAddress?: string;
-      blockchain?: string;
-    };
-  };
-}
 
-export interface MuralTransactionSearchResponse {
-  total: number;
-  nextId?: string;
-  results: MuralTransaction[];
-}

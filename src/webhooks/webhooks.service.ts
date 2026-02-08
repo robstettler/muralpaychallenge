@@ -58,5 +58,14 @@ export class WebhooksService {
         );
       }
     }
+
+    if (event.payload?.type === 'payout_status_changed') {
+      const { payoutRequestId, payoutId, statusChangeDetails } = event.payload;
+      await this.ordersService.updatePayoutStatus(
+        payoutRequestId,
+        payoutId,
+        statusChangeDetails.currentStatus.type,
+      );
+    }
   }
 }

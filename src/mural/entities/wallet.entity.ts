@@ -19,16 +19,16 @@ export class Wallet {
   @Column({ unique: true })
   muralAccountId: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   walletAddress: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   blockchain: string | null;
 
   @Column({ type: 'varchar', default: WalletStatus.INITIALIZING })
   status: WalletStatus;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   assignedToOrderId: string | null;
 
   @CreateDateColumn()

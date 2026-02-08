@@ -10,6 +10,7 @@ import { Repository, LessThan, DataSource } from 'typeorm';
 import { Interval } from '@nestjs/schedule';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
+import { Payout, PayoutStatus } from './entities/payout.entity';
 import { CartService } from '../cart/cart.service';
 import { MuralService } from '../mural/mural.service';
 import { Wallet, WalletStatus } from '../mural/entities/wallet.entity';
@@ -25,6 +26,8 @@ export class OrdersService implements OnModuleInit {
     private readonly orderRepo: Repository<Order>,
     @InjectRepository(OrderItem)
     private readonly orderItemRepo: Repository<OrderItem>,
+    @InjectRepository(Payout)
+    private readonly payoutRepo: Repository<Payout>,
     @InjectRepository(Wallet)
     private readonly walletRepo: Repository<Wallet>,
     private readonly cartService: CartService,
@@ -295,6 +298,14 @@ export class OrdersService implements OnModuleInit {
         return null;
       }
 
+      if (tokenAmount < Number(order.totalUsdc)) {
+        await queryRunner.rollbackTransaction();
+        this.logger.warn(
+          `Underpayment for order ${order.id}: received ${tokenAmount} USDC, expected ${order.totalUsdc} (tx: ${transactionHash})`,
+        );
+        return null;
+      }
+
       order.status = OrderStatus.PAID;
       order.transactionHash = transactionHash;
       order.paidAt = new Date();
@@ -315,6 +326,12 @@ export class OrdersService implements OnModuleInit {
       this.logger.log(
         `Order ${order.id} marked as PAID (tx: ${transactionHash})`,
       );
+
+      // Fire-and-forget COP payout
+      this.initiateCopPayout(order).catch((err) =>
+        this.logger.error(`Failed to initiate COP payout for order ${order.id}`, err),
+      );
+
       return order;
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -366,5 +383,115 @@ export class OrdersService implements OnModuleInit {
         await queryRunner.release();
       }
     }
+  }
+
+  async initiateCopPayout(order: Order): Promise<void> {
+    if (!order.muralAccountId) {
+      this.logger.warn(`Order ${order.id} has no muralAccountId — skipping payout`);
+      return;
+    }
+
+    const payoutRequest = await this.muralService.createPayout(
+      order.muralAccountId,
+      Number(order.totalUsdc),
+    );
+
+    // Save the payout record immediately after creation
+    const payout = this.payoutRepo.create({
+      orderId: order.id,
+      muralPayoutRequestId: payoutRequest.id,
+      muralPayoutId: payoutRequest.payouts?.[0]?.id ?? null,
+      status: PayoutStatus.INITIATED,
+      amountUsdc: Number(order.totalUsdc),
+    });
+    await this.payoutRepo.save(payout);
+
+    // Execute the payout — update record with fiat details on success
+    try {
+      const executeResponse = await this.muralService.executePayout(payoutRequest.id);
+      const firstPayout = executeResponse.payouts?.[0];
+      const fiatDetails = firstPayout?.details?.type === 'fiat' ? firstPayout.details : null;
+
+      if (fiatDetails) {
+        payout.amountCop = fiatDetails.fiatAmount?.fiatAmount ?? null;
+        payout.exchangeRate = fiatDetails.exchangeRate ?? null;
+      }
+      if (firstPayout?.id) {
+        payout.muralPayoutId = firstPayout.id;
+      }
+      await this.payoutRepo.save(payout);
+    } catch (err) {
+      const detail = err?.response?.data ?? err?.message;
+      this.logger.error(
+        `Failed to execute payout for order ${order.id} (request ${payoutRequest.id}) — payout record saved as INITIATED`,
+        JSON.stringify(detail),
+      );
+    }
+
+    this.logger.log(
+      `COP payout initiated for order ${order.id} — payout request ${payoutRequest.id}`,
+    );
+  }
+
+  async getPayoutByOrderId(orderId: string): Promise<Payout | null> {
+    return this.payoutRepo.findOne({ where: { orderId } });
+  }
+
+  async updatePayoutStatus(
+    muralPayoutRequestId: string,
+    muralPayoutId: string,
+    muralFiatStatus: string,
+  ): Promise<void> {
+    const payout = await this.payoutRepo.findOne({
+      where: { muralPayoutRequestId },
+    });
+    if (!payout) {
+      this.logger.warn(
+        `No payout found for payout request ${muralPayoutRequestId}`,
+      );
+      return;
+    }
+
+    const statusMap: Record<string, PayoutStatus> = {
+      pending: PayoutStatus.PENDING,
+      completed: PayoutStatus.COMPLETED,
+      failed: PayoutStatus.FAILED,
+      refundInProgress: PayoutStatus.FAILED,
+      refunded: PayoutStatus.FAILED,
+      canceled: PayoutStatus.FAILED,
+    };
+
+    const newStatus = statusMap[muralFiatStatus];
+    if (!newStatus) {
+      this.logger.warn(
+        `Unknown fiat status "${muralFiatStatus}" for payout request ${muralPayoutRequestId}`,
+      );
+      return;
+    }
+
+    payout.status = newStatus;
+    if (!payout.muralPayoutId) {
+      payout.muralPayoutId = muralPayoutId;
+    }
+
+    // If we didn't have exchange rate data before, try fetching it now
+    if (payout.exchangeRate === null) {
+      try {
+        const payoutRequest = await this.muralService.getPayout(muralPayoutRequestId);
+        const firstPayout = payoutRequest.payouts?.[0];
+        const fiatDetails = firstPayout?.details?.type === 'fiat' ? firstPayout.details : null;
+        if (fiatDetails) {
+          payout.amountCop = fiatDetails.fiatAmount?.fiatAmount ?? null;
+          payout.exchangeRate = fiatDetails.exchangeRate ?? null;
+        }
+      } catch (err) {
+        this.logger.error(`Failed to fetch payout details for ${muralPayoutRequestId}`, err);
+      }
+    }
+
+    await this.payoutRepo.save(payout);
+    this.logger.log(
+      `Payout ${payout.id} updated to ${newStatus} (mural fiat status: ${muralFiatStatus})`,
+    );
   }
 }
