@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { configure as serverlessExpress } from '@vendia/serverless-express';
 import { AppModule } from '../src/app.module';
 
@@ -14,6 +15,14 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, transform: true }),
   );
   app.enableCors();
+
+  const config = new DocumentBuilder()
+    .setTitle('Mural Pay Challenge')
+    .setDescription('Product checkout & USDC payment collection via Mural Pay')
+    .setVersion('1.0')
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
   await app.init();
   const expressApp = app.getHttpAdapter().getInstance();
