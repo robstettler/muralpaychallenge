@@ -1,15 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { configure as serverlessExpress } from '@vendia/serverless-express';
 import { AppModule } from '../src/app.module';
 
-let cachedServer: any;
+let app: any;
 
 async function bootstrap() {
-  if (cachedServer) return cachedServer;
+  if (app) return app;
 
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true }),
@@ -25,12 +24,11 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   await app.init();
-  const expressApp = app.getHttpAdapter().getInstance();
-  cachedServer = serverlessExpress({ app: expressApp });
-  return cachedServer;
+  return app;
 }
 
 export default async function handler(req: any, res: any) {
-  const server = await bootstrap();
-  return server(req, res);
+  const nestApp = await bootstrap();
+  const expressApp = nestApp.getHttpAdapter().getInstance();
+  expressApp(req, res);
 }
