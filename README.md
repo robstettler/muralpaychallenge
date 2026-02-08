@@ -112,6 +112,11 @@ npx nest start --watch
 
 ## Improvements Prior to Production
 
+**Authentication**
+- No authentication exists currently for the api
+- API key management
+- merchant dashboard authentication
+
 **Wallet pool service:**
 - Seperate API and service to provide wallet ids for above transactions
 - Pre-warm the pool to a minimum size (e.g., 20 AVAILABLE wallets) via a background job, rather than reactively replenishing one at a time after each checkout.
